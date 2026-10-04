@@ -56,7 +56,10 @@ Read before writing. `list_*` and `get_*` return one page. When `next_page` is s
 | `list_volumes`, `create_volume`, `volume_action` | Volumes |
 | `list_firewalls`, `get_firewall`, `create_firewall`, `set_firewall_rules`, `apply_firewall`, `delete_firewall` | Firewalls |
 | `get_action` | Poll an action |
-| `find_operations`, `cloud_api` | The rest of the Cloud API, still sent by this server |
+| `list_networks`, `list_load_balancers`, `list_primary_ips`, `list_floating_ips` | Project inventory. Changes go through `cloud_api` |
+| `find_operations`, `cloud_get`, `cloud_api` | The rest of the Cloud API. GET is read-only. Mutations stay on `cloud_api` |
+
+List results set `incomplete` when another page exists and `rate_limit.slow_down` when the project is close to the Hetzner limit. Server results include delete protection, public IPv6, and private IPs. A protected resource is refused before the API call. Each HTTP request times out after 30 seconds. Action polling uses a fresh request per tick and waits up to three minutes. Responses larger than 256KB are rejected with a hint to paginate.
 
 ## Develop
 
