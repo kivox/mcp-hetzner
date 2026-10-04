@@ -65,6 +65,26 @@ func (a *App) register(s *mcp.Server) {
 		Description: "List datacenter locations. Use the name as create_server.location.",
 		Annotations: readOnly("List locations"),
 	}, a.listLocations)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "list_networks",
+		Description: "List private networks with their IP range and how many servers are attached. Change a network with cloud_api.",
+		Annotations: readOnly("List networks"),
+	}, a.listNetworks)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "list_load_balancers",
+		Description: "List load balancers with public IPs and target counts. Change one with cloud_api.",
+		Annotations: readOnly("List load balancers"),
+	}, a.listLoadBalancers)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "list_primary_ips",
+		Description: "List primary IPs and the resource each is assigned to.",
+		Annotations: readOnly("List primary IPs"),
+	}, a.listPrimaryIPs)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "list_floating_ips",
+		Description: "List floating IPs and the server each is assigned to.",
+		Annotations: readOnly("List floating IPs"),
+	}, a.listFloatingIPs)
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "list_ssh_keys",
