@@ -9,9 +9,14 @@ func (a *App) register(s *mcp.Server) {
 		Annotations: readOnly("Find Cloud API operations"),
 	}, a.findOperations)
 	mcp.AddTool(s, &mcp.Tool{
+		Name:        "cloud_get",
+		Description: "GET one Cloud API path from find_operations. The server authenticates and performs the request. Read-only. Add query page and per_page when a list is incomplete.",
+		Annotations: readOnly("GET a Cloud API path"),
+	}, a.cloudGet)
+	mcp.AddTool(s, &mcp.Tool{
 		Name:        "cloud_api",
-		Description: "Ask the server to call one Cloud API operation. Pass method and path from find_operations. The server adds the project token and performs the HTTP request. Never include a token, Authorization header, or hostname.",
-		Annotations: destructive("Call the Cloud API"),
+		Description: "POST, PUT, or DELETE one Cloud API path from find_operations. The server authenticates and performs the request. Use cloud_get for GET. Never include a token or hostname.",
+		Annotations: destructive("Change the Cloud API"),
 	}, a.cloudAPI)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "get_action",

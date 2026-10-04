@@ -42,7 +42,7 @@ func (a *App) findOperations(_ context.Context, _ *mcp.CallToolRequest, in findI
 		sort.Slice(tags, func(i, j int) bool { return tags[i].Count > tags[j].Count })
 		return nil, findOut{
 			Tags: tags,
-			Hint: "Pass query to narrow this. Then call cloud_api with method and path from operations. The server sends the authenticated request.",
+			Hint: "Pass query to narrow this. Use cloud_get for a GET path and cloud_api for POST, PUT, or DELETE. The server sends the authenticated request.",
 		}, nil
 	}
 	limit := in.Limit
@@ -58,15 +58,22 @@ func (a *App) findOperations(_ context.Context, _ *mcp.CallToolRequest, in findI
 	}
 	return nil, findOut{
 		Operations: ops,
-		Hint:       "Call cloud_api with one of these method and path values. Fill path parameters with real ids. Do not send a token.",
+		Hint:       "Use cloud_get when method is GET. Use cloud_api for POST, PUT, and DELETE. Copy the path and fill ids. Do not send a token.",
 	}, nil
 }
 
+const maxCloudBody = 256 << 10
+
+type cloudGetIn struct {
+	Path  string            `json:"path" jsonschema:"GET path copied from find_operations, starting with /. Example: /networks. No host and no token."`
+	Query map[string]string `json:"query,omitempty" jsonschema:"Query parameters such as page and per_page."`
+}
+
 type cloudIn struct {
-	Method string            `json:"method" jsonschema:"GET, POST, PUT, or DELETE."`
+	Method string            `json:"method" jsonschema:"POST, PUT, or DELETE. Use cloud_get for GET."`
 	Path   string            `json:"path" jsonschema:"Path copied from find_operations, starting with /. Example: /servers/123/actions/enable_backup. No host and no token."`
 	Query  map[string]string `json:"query,omitempty" jsonschema:"Query string parameters."`
-	Body   string            `json:"body,omitempty" jsonschema:"Raw JSON body. Omit for GET and DELETE."`
+	Body   string            `json:"body,omitempty" jsonschema:"Raw JSON body, at most 256KB. Omit when the operation has no body."`
 }
 
 type cloudOut struct {
@@ -75,21 +82,33 @@ type cloudOut struct {
 	Path      string          `json:"path"`
 	Body      json.RawMessage `json:"body,omitempty"`
 	Text      string          `json:"text,omitempty"`
+	Truncated bool            `json:"truncated,omitempty"`
 	RateLimit rateInfo        `json:"rate_limit"`
+	Error     string          `json:"error,omitempty"`
+}
+
+func (a *App) cloudGet(ctx context.Context, _ *mcp.CallToolRequest, in cloudGetIn) (*mcp.CallToolResult, cloudOut, error) {
+	return a.callCloud(ctx, "GET", in.Path, in.Query, "")
 }
 
 func (a *App) cloudAPI(ctx context.Context, _ *mcp.CallToolRequest, in cloudIn) (*mcp.CallToolResult, cloudOut, error) {
+	method := strings.ToUpper(strings.TrimSpace(in.Method))
+	switch method {
+	case "POST", "PUT", "DELETE":
+	case "GET":
+		return nil, cloudOut{}, fmt.Errorf("use cloud_get for GET")
+	default:
+		return nil, cloudOut{}, fmt.Errorf("method must be POST, PUT, or DELETE")
+	}
+	return a.callCloud(ctx, method, in.Path, in.Query, in.Body)
+}
+
+func (a *App) callCloud(ctx context.Context, method, path string, query map[string]string, body string) (*mcp.CallToolResult, cloudOut, error) {
 	client, err := a.api()
 	if err != nil {
 		return nil, cloudOut{}, err
 	}
-	method := strings.ToUpper(strings.TrimSpace(in.Method))
-	path := strings.TrimSpace(in.Path)
-	switch method {
-	case "GET", "POST", "PUT", "DELETE":
-	default:
-		return nil, cloudOut{}, fmt.Errorf("method must be GET, POST, PUT, or DELETE")
-	}
+	path = strings.TrimSpace(path)
 	if !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.Contains(path, "://") || strings.ContainsAny(path, "?#") {
 		return nil, cloudOut{}, fmt.Errorf("path must be an absolute Cloud API path from find_operations, without a query string")
 	}
@@ -100,42 +119,50 @@ func (a *App) cloudAPI(ctx context.Context, _ *mcp.CallToolRequest, in cloudIn) 
 	if !ok {
 		return nil, cloudOut{}, fmt.Errorf("%s %s is not in the Hetzner Cloud API. Call find_operations", method, path)
 	}
-	if len(in.Query) > 0 {
+	if len(body) > maxCloudBody {
+		return nil, cloudOut{}, fmt.Errorf("body is %d bytes; the limit is %d", len(body), maxCloudBody)
+	}
+	requestPath := path
+	if len(query) > 0 {
 		values := url.Values{}
-		for key, value := range in.Query {
+		for key, value := range query {
 			values.Set(key, value)
 		}
-		path += "?" + values.Encode()
+		requestPath += "?" + values.Encode()
 	}
 	var payload *strings.Reader
-	if in.Body != "" {
-		if !json.Valid([]byte(in.Body)) {
+	if body != "" {
+		if !json.Valid([]byte(body)) {
 			return nil, cloudOut{}, fmt.Errorf("body must be JSON")
 		}
-		payload = strings.NewReader(in.Body)
+		payload = strings.NewReader(body)
 	}
-	req, err := client.NewRequest(ctx, method, path, payload)
+	httpReq, err := client.NewRequest(ctx, method, requestPath, payload)
 	if err != nil {
 		return nil, cloudOut{}, err
 	}
 	var buf bytes.Buffer
-	resp, err := client.Do(req, &buf)
+	resp, err := client.Do(httpReq, &buf)
 	out := cloudOut{Path: op.Path, Operation: op.Operation}
 	if resp != nil {
 		out.Status = resp.StatusCode
 		_, out.RateLimit = metaOf(resp)
 	}
-	if buf.Len() > 0 && json.Valid(buf.Bytes()) {
-		out.Body = json.RawMessage(append([]byte(nil), buf.Bytes()...))
-	} else if buf.Len() > 0 {
-		out.Text = buf.String()
+	payloadBytes := buf.Bytes()
+	if len(payloadBytes) > maxCloudBody {
+		out.Truncated = true
+		out.Error = "response is larger than 256KB. Repeat the call with query page and per_page."
+		out.Text = string(payloadBytes[:1024])
+		return &mcp.CallToolResult{IsError: true}, out, nil
+	}
+	if len(payloadBytes) > 0 && json.Valid(payloadBytes) {
+		out.Body = json.RawMessage(append([]byte(nil), payloadBytes...))
+	} else if len(payloadBytes) > 0 {
+		out.Text = string(payloadBytes)
 	}
 	if err != nil {
-		snippet := buf.String()
-		if len(snippet) > 2000 {
-			snippet = snippet[:2000]
-		}
-		return nil, cloudOut{}, fmt.Errorf("%s %s: %w: %s", method, op.Path, err, snippet)
+		out.Error = err.Error()
+		return &mcp.CallToolResult{IsError: true}, out, nil
 	}
 	return nil, out, nil
 }
