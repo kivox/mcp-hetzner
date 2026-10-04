@@ -16,6 +16,23 @@ The server resolves a token at startup. An environment variable wins. Otherwise 
 
 `HCLOUD_CONFIG` overrides the config path. The token is not written to logs. If neither source is set, the process still starts and tool calls return a clear error so the agent can tell you.
 
+## Install a release
+
+Published builds are on the [releases page](https://github.com/foxcore-cloud/hetzner-mcp/releases). Each tag `vX.Y.Z` has archives named `mcp-hetzner_X.Y.Z_<os>_<arch>.tar.gz` (`.zip` on Windows) and a `checksums.txt`.
+
+```bash
+version=0.3.0
+os=linux   # linux, darwin, or windows
+arch=amd64 # amd64 or arm64
+curl -fsSL -O "https://github.com/foxcore-cloud/hetzner-mcp/releases/download/v${version}/mcp-hetzner_${version}_${os}_${arch}.tar.gz"
+curl -fsSL -O "https://github.com/foxcore-cloud/hetzner-mcp/releases/download/v${version}/checksums.txt"
+grep "mcp-hetzner_${version}_${os}_${arch}.tar.gz" checksums.txt | sha256sum -c -
+tar -xzf "mcp-hetzner_${version}_${os}_${arch}.tar.gz"
+./mcp-hetzner -version
+```
+
+Point the MCP client at that binary. A local `go build` prints `dev` for `-version`.
+
 ## Run
 
 ```bash
@@ -77,6 +94,19 @@ go test ./...
 ```
 
 GitHub Actions runs the same command on every push and pull request.
+
+## Cut a release
+
+From a clean `main` whose tests are green, tag and push. The tag must look like `v1.2.3`. The release workflow tests, builds the six archives, writes checksums, and publishes the GitHub release. Do not upload those files by hand.
+
+```bash
+git checkout main
+git pull
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+The release is ready when the `release` workflow on that tag is green. `mcp-hetzner -version` then prints `0.3.0`.
 
 `internal/catalog/operations.json` is the operation index from `https://docs.hetzner.cloud/cloud.spec.json`. Regenerate it when Hetzner publishes a new spec. Do not commit the 3 MB source document.
 
