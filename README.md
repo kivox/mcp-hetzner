@@ -1,5 +1,7 @@
 # Hetzner Cloud MCP
 
+Repository: [foxcore-cloud/hetzner-mcp](https://github.com/foxcore-cloud/hetzner-mcp)
+
 An MCP server for agents that manage one Hetzner Cloud project. The server holds the project token and performs every HTTP request. A tool call never accepts a token, an `Authorization` header, or a hostname.
 
 It uses [`hcloud-go`](https://github.com/hetznercloud/hcloud-go) for the Cloud API and a compact index of the [official OpenAPI spec](https://docs.hetzner.cloud/cloud.spec.json). The everyday resources are named tools. Everything else is `find_operations`, then `cloud_api`.
