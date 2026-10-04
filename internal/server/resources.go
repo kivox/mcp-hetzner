@@ -310,6 +310,9 @@ func (a *App) volumeAction(ctx context.Context, _ *mcp.CallToolRequest, in volum
 		if volume.Name != in.ConfirmName {
 			return nil, volumeOut{}, fmt.Errorf("confirm_name %q does not match volume %q", in.ConfirmName, volume.Name)
 		}
+		if err = refuseProtected("volume", volume.Name, volume.Protection.Delete); err != nil {
+			return nil, volumeOut{}, err
+		}
 		if _, err = client.Volume.Delete(ctx, volume); err != nil {
 			return nil, volumeOut{}, err
 		}

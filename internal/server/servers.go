@@ -158,6 +158,9 @@ func (a *App) deleteServer(ctx context.Context, _ *mcp.CallToolRequest, in delet
 	if server.Name != in.ConfirmName {
 		return nil, deletedOut{}, fmt.Errorf("confirm_name %q does not match server %q", in.ConfirmName, server.Name)
 	}
+	if err = refuseProtected("server", server.Name, server.Protection.Delete); err != nil {
+		return nil, deletedOut{}, err
+	}
 	result, _, err := client.Server.DeleteWithResult(ctx, server)
 	if err != nil {
 		return nil, deletedOut{}, err
