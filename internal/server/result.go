@@ -13,16 +13,18 @@ type page struct {
 }
 
 type pageInfo struct {
-	Page     int `json:"page,omitempty"`
-	PerPage  int `json:"per_page,omitempty"`
-	NextPage int `json:"next_page,omitempty"`
-	LastPage int `json:"last_page,omitempty"`
-	Total    int `json:"total,omitempty"`
+	Page       int  `json:"page,omitempty"`
+	PerPage    int  `json:"per_page,omitempty"`
+	NextPage   int  `json:"next_page,omitempty"`
+	LastPage   int  `json:"last_page,omitempty"`
+	Total      int  `json:"total,omitempty"`
+	Incomplete bool `json:"incomplete,omitempty"`
 }
 
 type rateInfo struct {
-	Limit     int `json:"limit,omitempty"`
-	Remaining int `json:"remaining,omitempty"`
+	Limit     int  `json:"limit,omitempty"`
+	Remaining int  `json:"remaining,omitempty"`
+	SlowDown  bool `json:"slow_down,omitempty"`
 }
 
 func (p page) listOpts() hcloud.ListOpts {
@@ -48,14 +50,19 @@ func metaOf(resp *hcloud.Response) (pageInfo, rateInfo) {
 	if resp.Meta.Pagination != nil {
 		pg := resp.Meta.Pagination
 		info = pageInfo{
-			Page:     pg.Page,
-			PerPage:  pg.PerPage,
-			NextPage: pg.NextPage,
-			LastPage: pg.LastPage,
-			Total:    pg.TotalEntries,
+			Page:       pg.Page,
+			PerPage:    pg.PerPage,
+			NextPage:   pg.NextPage,
+			LastPage:   pg.LastPage,
+			Total:      pg.TotalEntries,
+			Incomplete: pg.NextPage > 0,
 		}
 	}
-	return info, rateInfo{Limit: resp.Meta.Ratelimit.Limit, Remaining: resp.Meta.Ratelimit.Remaining}
+	rate := rateInfo{Limit: resp.Meta.Ratelimit.Limit, Remaining: resp.Meta.Ratelimit.Remaining}
+	if rate.Limit > 0 && rate.Remaining < 20 {
+		rate.SlowDown = true
+	}
+	return info, rate
 }
 
 func wantWait(v *bool) bool {
