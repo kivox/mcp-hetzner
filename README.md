@@ -52,7 +52,8 @@ Read before writing. `list_*` and `get_*` return one page. When `next_page` is s
 
 | Tool | What the server does |
 | --- | --- |
-| `list_servers`, `get_server`, `create_server`, `delete_server`, `server_power` | Server inventory and power |
+| `describe_project` | First page of servers plus totals for the rest of the project. Start here |
+| `list_servers`, `get_server`, `create_server`, `update_server`, `set_server_protection`, `delete_server`, `server_power` | Server inventory, rename, labels, protection, and power |
 | `list_server_types`, `list_images`, `list_locations` | Choices for creating a server |
 | `list_ssh_keys`, `create_ssh_key`, `delete_ssh_key` | Project SSH keys |
 | `list_volumes`, `create_volume`, `volume_action` | Volumes |
@@ -68,6 +69,8 @@ List results set `incomplete` when another page exists and `rate_limit.slow_down
 ```bash
 go test ./...
 ```
+
+GitHub Actions runs the same command on every push and pull request.
 
 `internal/catalog/operations.json` is the operation index from `https://docs.hetzner.cloud/cloud.spec.json`. Regenerate it when Hetzner publishes a new spec. Do not commit the 3 MB source document.
 
