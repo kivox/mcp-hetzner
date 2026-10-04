@@ -10,8 +10,8 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/foxcore-cloud/mcp-hetzner/internal/auth"
-	"github.com/foxcore-cloud/mcp-hetzner/internal/server"
+	"github.com/foxcore-cloud/hetzner-mcp/internal/auth"
+	"github.com/foxcore-cloud/hetzner-mcp/internal/server"
 )
 
 func main() {

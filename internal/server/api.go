@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/foxcore-cloud/mcp-hetzner/internal/catalog"
+	"github.com/foxcore-cloud/hetzner-mcp/internal/catalog"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

@@ -1,4 +1,4 @@
-module github.com/foxcore-cloud/mcp-hetzner
+module github.com/foxcore-cloud/hetzner-mcp
 
 go 1.25.0
 
