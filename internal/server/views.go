@@ -1,18 +1,30 @@
 package server
 
-import "github.com/hetznercloud/hcloud-go/v2/hcloud"
+import (
+	"fmt"
+
+	"github.com/hetznercloud/hcloud-go/v2/hcloud"
+)
+
+type protectionView struct {
+	Delete  bool `json:"delete,omitempty"`
+	Rebuild bool `json:"rebuild,omitempty"`
+}
 
 type serverView struct {
-	ID       int64             `json:"id"`
-	Name     string            `json:"name"`
-	Status   string            `json:"status"`
-	Type     string            `json:"type,omitempty"`
-	Image    string            `json:"image,omitempty"`
-	Location string            `json:"location,omitempty"`
-	IPv4     string            `json:"ipv4,omitempty"`
-	IPv6     string            `json:"ipv6,omitempty"`
-	Labels   map[string]string `json:"labels,omitempty"`
-	Locked   bool              `json:"locked,omitempty"`
+	ID          int64             `json:"id"`
+	Name        string            `json:"name"`
+	Status      string            `json:"status"`
+	Type        string            `json:"type,omitempty"`
+	Image       string            `json:"image,omitempty"`
+	Location    string            `json:"location,omitempty"`
+	IPv4        string            `json:"ipv4,omitempty"`
+	IPv6        string            `json:"ipv6,omitempty"`
+	IPv6Network string            `json:"ipv6_network,omitempty"`
+	PrivateIPs  []string          `json:"private_ips,omitempty"`
+	Protection  *protectionView   `json:"protection,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Locked      bool              `json:"locked,omitempty"`
 }
 
 type actionView struct {
@@ -45,7 +57,26 @@ func viewServer(s *hcloud.Server) serverView {
 	}
 	view.IPv4 = ipString(s.PublicNet.IPv4.IP)
 	view.IPv6 = ipString(s.PublicNet.IPv6.IP)
+	if s.PublicNet.IPv6.Network != nil {
+		view.IPv6Network = s.PublicNet.IPv6.Network.String()
+	}
+	for _, private := range s.PrivateNet {
+		if ip := ipString(private.IP); ip != "" {
+			view.PrivateIPs = append(view.PrivateIPs, ip)
+		}
+	}
+	if s.Protection.Delete || s.Protection.Rebuild {
+		view.Protection = &protectionView{Delete: s.Protection.Delete, Rebuild: s.Protection.Rebuild}
+	}
 	return view
+}
+
+// refuseProtected stops a delete before the API does, and tells the agent why.
+func refuseProtected(kind, name string, protected bool) error {
+	if !protected {
+		return nil
+	}
+	return fmt.Errorf("%s %q has delete protection enabled. Disable protection before deleting it", kind, name)
 }
 
 func viewAction(a *hcloud.Action) *actionView {
