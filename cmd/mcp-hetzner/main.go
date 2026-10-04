@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/foxcore-cloud/mcp-hetzner/internal/auth"
@@ -27,7 +26,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "mcp-hetzner: %s\n", err)
 		fmt.Fprintf(os.Stderr, "mcp-hetzner: tools that call Hetzner will fail until a token is available\n")
 	} else {
-		app.Client = hcloud.NewClient(hcloud.WithToken(token))
+		app.Client = server.NewClient(token)
 		fmt.Fprintf(os.Stderr, "mcp-hetzner: authenticated via %s\n", source)
 	}
 
