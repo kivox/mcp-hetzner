@@ -87,6 +87,19 @@ type cloudOut struct {
 	Error     string          `json:"error,omitempty"`
 }
 
+// normalizeCloudPath accepts the paths find_operations returns and the /v1
+// form agents copy from the Hetzner docs. The client already targets /v1.
+func normalizeCloudPath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if strings.HasPrefix(path, "/v1/") {
+		path = strings.TrimPrefix(path, "/v1")
+	}
+	if !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.Contains(path, "://") || strings.ContainsAny(path, "?#") {
+		return "", fmt.Errorf("path must be an absolute Cloud API path from find_operations, without a query string")
+	}
+	return path, nil
+}
+
 func (a *App) cloudGet(ctx context.Context, _ *mcp.CallToolRequest, in cloudGetIn) (*mcp.CallToolResult, cloudOut, error) {
 	return a.callCloud(ctx, "GET", in.Path, in.Query, "")
 }
@@ -108,9 +121,9 @@ func (a *App) callCloud(ctx context.Context, method, path string, query map[stri
 	if err != nil {
 		return nil, cloudOut{}, err
 	}
-	path = strings.TrimSpace(path)
-	if !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || strings.Contains(path, "://") || strings.ContainsAny(path, "?#") {
-		return nil, cloudOut{}, fmt.Errorf("path must be an absolute Cloud API path from find_operations, without a query string")
+	path, err = normalizeCloudPath(path)
+	if err != nil {
+		return nil, cloudOut{}, err
 	}
 	op, ok, err := catalog.Allow(method, path)
 	if err != nil {

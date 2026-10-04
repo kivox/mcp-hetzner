@@ -17,7 +17,7 @@ Read before you change anything. Use list or get tools, then act on the id and n
 delete tools require confirm_name to equal the live resource name.
 Prefer server_power action "shutdown" (graceful) over "poweroff" (hard).
 create_server and power actions wait until Hetzner finishes unless you set wait to false. A root password is returned only when the server was created without an SSH key. Repeat it to the user once.
-When no dedicated tool exists, call find_operations. Then cloud_get for a GET, or cloud_api for POST, PUT, or DELETE. Copy the path. The server sends the request.
+When no dedicated tool exists, call find_operations. Then cloud_get for a GET, or cloud_api for POST, PUT, or DELETE. Copy the path. A /v1 prefix is accepted. The server sends the request.
 If incomplete or next_page is set, call again with that page. The first page is not the whole project.
 If rate_limit.slow_down is true, stop and wait instead of retrying.
 If protection.delete is true, do not call a delete tool. Disable protection first.`
