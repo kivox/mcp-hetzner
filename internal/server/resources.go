@@ -14,13 +14,14 @@ type namedList struct {
 }
 
 type serverTypeView struct {
-	Name        string  `json:"name"`
-	Description string  `json:"description,omitempty"`
-	Cores       int     `json:"cores"`
-	MemoryGB    float32 `json:"memory_gb"`
-	DiskGB      int     `json:"disk_gb"`
-	CPU         string  `json:"cpu_type,omitempty"`
-	Storage     string  `json:"storage_type,omitempty"`
+	Name         string  `json:"name"`
+	Description  string  `json:"description,omitempty"`
+	Cores        int     `json:"cores"`
+	MemoryGB     float32 `json:"memory_gb"`
+	DiskGB       int     `json:"disk_gb"`
+	CPU          string  `json:"cpu_type,omitempty"`
+	Architecture string  `json:"architecture,omitempty"`
+	Storage      string  `json:"storage_type,omitempty"`
 }
 
 type serverTypesOut struct {
@@ -42,7 +43,8 @@ func (a *App) listServerTypes(ctx context.Context, _ *mcp.CallToolRequest, in pa
 	for _, item := range items {
 		out.ServerTypes = append(out.ServerTypes, serverTypeView{
 			Name: item.Name, Description: item.Description, Cores: item.Cores,
-			MemoryGB: item.Memory, DiskGB: item.Disk, CPU: string(item.CPUType), Storage: string(item.StorageType),
+			MemoryGB: item.Memory, DiskGB: item.Disk, CPU: string(item.CPUType),
+			Architecture: string(item.Architecture), Storage: string(item.StorageType),
 		})
 	}
 	if out.ServerTypes == nil {
