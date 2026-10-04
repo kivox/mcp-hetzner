@@ -90,9 +90,9 @@ func (a *App) createServer(ctx context.Context, _ *mcp.CallToolRequest, in creat
 	if err != nil || serverType == nil {
 		return nil, createServerOut{}, fmt.Errorf("server type %q: %w", in.ServerType, errOrMissing(err))
 	}
-	image, _, err := client.Image.Get(ctx, in.Image)
+	image, _, err := client.Image.GetForArchitecture(ctx, in.Image, serverType.Architecture)
 	if err != nil || image == nil {
-		return nil, createServerOut{}, fmt.Errorf("image %q: %w", in.Image, errOrMissing(err))
+		return nil, createServerOut{}, fmt.Errorf("image %q for %s: %w", in.Image, serverType.Architecture, errOrMissing(err))
 	}
 	opts := hcloud.ServerCreateOpts{
 		Name:       in.Name,
