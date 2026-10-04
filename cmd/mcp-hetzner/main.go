@@ -19,7 +19,12 @@ func main() {
 	transport := flag.String("transport", "stdio", "stdio or http. http is the streamable MCP endpoint.")
 	host := flag.String("host", env("MCP_HOST", "127.0.0.1"), "HTTP listen host")
 	port := flag.Int("port", envInt("MCP_PORT", 8080), "HTTP listen port")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(server.Version)
+		return
+	}
 
 	app := &server.App{}
 	token, source, err := auth.Resolve()

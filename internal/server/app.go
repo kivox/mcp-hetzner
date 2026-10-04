@@ -35,7 +35,7 @@ func NewServer(app *App) *mcp.Server {
 	}
 	s := mcp.NewServer(&mcp.Implementation{
 		Name:    "mcp-hetzner",
-		Version: "0.2.0",
+		Version: Version,
 		Title:   "Hetzner Cloud",
 	}, &mcp.ServerOptions{Instructions: instructions})
 	app.register(s)
