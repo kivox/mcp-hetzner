@@ -40,6 +40,16 @@ func (a *App) register(s *mcp.Server) {
 		Annotations: additive("Create server"),
 	}, a.createServer)
 	mcp.AddTool(s, &mcp.Tool{
+		Name:        "update_server",
+		Description: "Rename a server or replace its labels. Omitted fields stay as they are. An empty labels object clears every label.",
+		Annotations: additive("Update server"),
+	}, a.updateServer)
+	mcp.AddTool(s, &mcp.Tool{
+		Name:        "set_server_protection",
+		Description: "Turn delete or rebuild protection on or off. Disable delete protection before delete_server. The server sends the action and waits by default.",
+		Annotations: additive("Set server protection"),
+	}, a.setServerProtection)
+	mcp.AddTool(s, &mcp.Tool{
 		Name:        "delete_server",
 		Description: "Delete a server. confirm_name must exactly match the live name from get_server.",
 		Annotations: destructive("Delete server"),
