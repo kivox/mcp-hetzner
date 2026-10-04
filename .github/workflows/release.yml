@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build archives
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) echo "tag must look like v1.2.3" >&2; exit 1 ;;
+          esac
+          version="${TAG#v}"
+          case "$version" in
+            *[!0-9A-Za-z._-]*) echo "refusing unusual tag" >&2; exit 1 ;;
+          esac
+          mkdir -p dist
+          ldflags="-s -w -X github.com/foxcore-cloud/hetzner-mcp/internal/server.Version=${version}"
+          for goos in linux darwin windows; do
+            for goarch in amd64 arm64; do
+              ext=""
+              if [ "$goos" = "windows" ]; then ext=".exe"; fi
+              bin="mcp-hetzner${ext}"
+              name="mcp-hetzner_${version}_${goos}_${goarch}"
+              CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch" \
+                go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/mcp-hetzner
+              if [ "$goos" = "windows" ]; then
+                zip "dist/${name}.zip" "$bin"
+              else
+                tar -czf "dist/${name}.tar.gz" "$bin"
+              fi
+              rm -f "$bin"
+            done
+          done
+          (cd dist && sha256sum ./* > checksums.txt)
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --generate-notes dist/*
