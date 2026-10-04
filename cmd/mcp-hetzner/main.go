@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -37,10 +38,19 @@ func main() {
 			log.Fatal(err)
 		}
 	case "http", "sse":
+		mcpToken := os.Getenv("MCP_AUTH_TOKEN")
+		if err := guardPublicListen(*host, mcpToken); err != nil {
+			log.Fatal(err)
+		}
 		addr := fmt.Sprintf("%s:%d", *host, *port)
 		handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, nil)
+		srv := &http.Server{
+			Addr:              addr,
+			Handler:           requireBearer(mcpToken, handler),
+			ReadHeaderTimeout: 10 * time.Second,
+		}
 		fmt.Fprintf(os.Stderr, "mcp-hetzner: streamable HTTP on http://%s\n", addr)
-		if err := http.ListenAndServe(addr, handler); err != nil {
+		if err := srv.ListenAndServe(); err != nil {
 			log.Fatal(err)
 		}
 	default:
