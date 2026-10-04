@@ -8,8 +8,7 @@ import (
 )
 
 type countView struct {
-	Total      int  `json:"total"`
-	Incomplete bool `json:"incomplete,omitempty"`
+	Total int `json:"total"`
 }
 
 type projectOut struct {
@@ -82,7 +81,6 @@ func (a *App) describeProject(ctx context.Context, _ *mcp.CallToolRequest, _ str
 		}
 		page, rate := metaOf(resp)
 		item.dest.Total = page.Total
-		item.dest.Incomplete = page.Incomplete
 		if rate.SlowDown {
 			out.RateLimit = rate
 		}
