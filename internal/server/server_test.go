@@ -27,17 +27,23 @@ func TestToolsAdvertiseServerSideAuth(t *testing.T) {
 			t.Fatal(err)
 		}
 		names = append(names, tool.Name)
-		if tool.Name == "cloud_api" {
+		if tool.Name == "cloud_api" || tool.Name == "cloud_get" {
 			props, _ := tool.InputSchema.(map[string]any)["properties"].(map[string]any)
 			if _, ok := props["token"]; ok {
-				t.Fatal("cloud_api must not accept a token")
+				t.Fatal(tool.Name + " must not accept a token")
 			}
 			if _, ok := props["authorization"]; ok {
-				t.Fatal("cloud_api must not accept an authorization header")
+				t.Fatal(tool.Name + " must not accept an authorization header")
 			}
 		}
+		if tool.Name == "cloud_get" && (tool.Annotations == nil || !tool.Annotations.ReadOnlyHint) {
+			t.Fatal("cloud_get must be read-only so hosts can auto-approve it")
+		}
+		if tool.Name == "delete_server" && (tool.Annotations == nil || tool.Annotations.DestructiveHint == nil || !*tool.Annotations.DestructiveHint) {
+			t.Fatal("delete_server must be marked destructive")
+		}
 	}
-	for _, want := range []string{"find_operations", "cloud_api", "list_servers", "create_server", "delete_server"} {
+	for _, want := range []string{"find_operations", "cloud_get", "cloud_api", "list_servers", "list_networks", "create_server", "delete_server"} {
 		if !contains(names, want) {
 			t.Fatalf("missing tool %s in %v", want, names)
 		}
