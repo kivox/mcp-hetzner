@@ -24,6 +24,12 @@ go build -o bin/mcp-hetzner ./cmd/mcp-hetzner
 ./bin/mcp-hetzner --transport http # streamable HTTP on 127.0.0.1:8080
 ```
 
+A listener other than loopback is refused unless `MCP_AUTH_TOKEN` is set. Clients then send `Authorization: Bearer <MCP_AUTH_TOKEN>`. That token is for the MCP endpoint. It is not the Hetzner token.
+
+```bash
+MCP_HOST=0.0.0.0 MCP_AUTH_TOKEN=choose-a-long-secret ./bin/mcp-hetzner --transport http
+```
+
 Claude, Cursor, or another MCP client should launch the stdio binary. Do not put the token in the client config if the CLI context is already set.
 
 ```json
