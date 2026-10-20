@@ -20,7 +20,7 @@ create_server and power actions wait until Hetzner finishes unless you set wait 
 When no dedicated tool exists, call find_operations. Then cloud_get for a GET, or cloud_api for POST, PUT, or DELETE. Copy the path. A /v1 prefix is accepted. The server sends the request.
 If incomplete or next_page is set, call again with that page. The first page is not the whole project.
 If rate_limit.slow_down is true, stop and wait instead of retrying.
-If protection.delete is true, do not call a delete tool. Disable protection first.`
+If protection.delete is true, do not call a delete tool. If protection.rebuild is true, do not call rebuild_server. Disable protection first.`
 
 // App is the authenticated Hetzner client shared by every tool.
 type App struct {
@@ -62,6 +62,9 @@ func (a *App) wait(ctx context.Context, actions ...*hcloud.Action) error {
 	ctx, cancel := context.WithTimeout(ctx, 3*time.Minute)
 	defer cancel()
 	if err := a.Client.Action.WaitFor(ctx, live...); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("Hetzner is still running %d action(s) after 3m. Read them with get_action instead of repeating the change: %w", len(live), err)
+		}
 		return fmt.Errorf("action did not succeed: %w", err)
 	}
 	return nil
@@ -71,8 +74,16 @@ func readOnly(title string) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{Title: title, ReadOnlyHint: true}
 }
 
+// additive marks a tool that changes state without destroying anything and
+// reaches the same result when it is called twice.
 func additive(title string) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{Title: title, DestructiveHint: boolPtr(false), IdempotentHint: true}
+}
+
+// creates marks a tool that allocates a new resource. Calling it twice makes
+// two resources, so it must not be advertised as idempotent.
+func creates(title string) *mcp.ToolAnnotations {
+	return &mcp.ToolAnnotations{Title: title, DestructiveHint: boolPtr(false), IdempotentHint: false}
 }
 
 func destructive(title string) *mcp.ToolAnnotations {

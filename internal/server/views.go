@@ -12,19 +12,21 @@ type protectionView struct {
 }
 
 type serverView struct {
-	ID          int64             `json:"id"`
-	Name        string            `json:"name"`
-	Status      string            `json:"status"`
-	Type        string            `json:"type,omitempty"`
-	Image       string            `json:"image,omitempty"`
-	Location    string            `json:"location,omitempty"`
-	IPv4        string            `json:"ipv4,omitempty"`
-	IPv6        string            `json:"ipv6,omitempty"`
-	IPv6Network string            `json:"ipv6_network,omitempty"`
-	PrivateIPs  []string          `json:"private_ips,omitempty"`
-	Protection  *protectionView   `json:"protection,omitempty"`
-	Labels      map[string]string `json:"labels,omitempty"`
-	Locked      bool              `json:"locked,omitempty"`
+	ID           int64             `json:"id"`
+	Name         string            `json:"name"`
+	Status       string            `json:"status"`
+	Type         string            `json:"type,omitempty"`
+	Image        string            `json:"image,omitempty"`
+	Location     string            `json:"location,omitempty"`
+	IPv4         string            `json:"ipv4,omitempty"`
+	IPv6         string            `json:"ipv6,omitempty"`
+	IPv6Network  string            `json:"ipv6_network,omitempty"`
+	PrivateIPs   []string          `json:"private_ips,omitempty"`
+	Protection   *protectionView   `json:"protection,omitempty"`
+	Labels       map[string]string `json:"labels,omitempty"`
+	Locked       bool              `json:"locked,omitempty"`
+	Rescue       bool              `json:"rescue_enabled,omitempty"`
+	BackupWindow string            `json:"backup_window,omitempty"`
 }
 
 type actionView struct {
@@ -45,6 +47,10 @@ func viewServer(s *hcloud.Server) serverView {
 		Status: string(s.Status),
 		Labels: s.Labels,
 		Locked: s.Locked,
+		Rescue: s.RescueEnabled,
+	}
+	if s.BackupWindow != "" {
+		view.BackupWindow = s.BackupWindow
 	}
 	if s.ServerType != nil {
 		view.Type = s.ServerType.Name
@@ -95,6 +101,15 @@ func viewAction(a *hcloud.Action) *actionView {
 	return view
 }
 
+// actionValue is the non-pointer form for outputs that always carry an action.
+// A missing action must not panic the tool call.
+func actionValue(a *hcloud.Action) actionView {
+	if view := viewAction(a); view != nil {
+		return *view
+	}
+	return actionView{}
+}
+
 func viewActions(actions []*hcloud.Action) []actionView {
 	out := make([]actionView, 0, len(actions))
 	for _, action := range actions {
@@ -117,20 +132,21 @@ func viewSSHKey(key *hcloud.SSHKey) sshKeyView {
 }
 
 type volumeView struct {
-	ID       int64             `json:"id"`
-	Name     string            `json:"name"`
-	Size     int               `json:"size_gb"`
-	Status   string            `json:"status,omitempty"`
-	Location string            `json:"location,omitempty"`
-	ServerID int64             `json:"server_id,omitempty"`
-	Device   string            `json:"linux_device,omitempty"`
-	Labels   map[string]string `json:"labels,omitempty"`
+	ID        int64             `json:"id"`
+	Name      string            `json:"name"`
+	Size      int               `json:"size_gb"`
+	Status    string            `json:"status,omitempty"`
+	Location  string            `json:"location,omitempty"`
+	ServerID  int64             `json:"server_id,omitempty"`
+	Device    string            `json:"linux_device,omitempty"`
+	Labels    map[string]string `json:"labels,omitempty"`
+	Protected bool              `json:"delete_protection,omitempty"`
 }
 
 func viewVolume(v *hcloud.Volume) volumeView {
 	out := volumeView{
 		ID: v.ID, Name: v.Name, Size: v.Size, Status: string(v.Status),
-		Device: v.LinuxDevice, Labels: v.Labels,
+		Device: v.LinuxDevice, Labels: v.Labels, Protected: v.Protection.Delete,
 	}
 	if v.Location != nil {
 		out.Location = v.Location.Name
@@ -150,15 +166,38 @@ type firewallRuleView struct {
 	Description    string   `json:"description,omitempty"`
 }
 
+type firewallTargetView struct {
+	Type          string  `json:"type"`
+	ServerID      int64   `json:"server_id,omitempty"`
+	LabelSelector string  `json:"label_selector,omitempty"`
+	ServerIDs     []int64 `json:"applied_server_ids,omitempty"`
+}
+
 type firewallView struct {
-	ID     int64              `json:"id"`
-	Name   string             `json:"name"`
-	Rules  []firewallRuleView `json:"rules,omitempty"`
-	Labels map[string]string  `json:"labels,omitempty"`
+	ID        int64                `json:"id"`
+	Name      string               `json:"name"`
+	Rules     []firewallRuleView   `json:"rules,omitempty"`
+	AppliedTo []firewallTargetView `json:"applied_to,omitempty"`
+	Labels    map[string]string    `json:"labels,omitempty"`
 }
 
 func viewFirewall(fw *hcloud.Firewall) firewallView {
 	out := firewallView{ID: fw.ID, Name: fw.Name, Labels: fw.Labels}
+	for _, target := range fw.AppliedTo {
+		item := firewallTargetView{Type: string(target.Type)}
+		if target.Server != nil {
+			item.ServerID = target.Server.ID
+		}
+		if target.LabelSelector != nil {
+			item.LabelSelector = target.LabelSelector.Selector
+		}
+		for _, applied := range target.AppliedToResources {
+			if applied.Server != nil {
+				item.ServerIDs = append(item.ServerIDs, applied.Server.ID)
+			}
+		}
+		out.AppliedTo = append(out.AppliedTo, item)
+	}
 	for _, rule := range fw.Rules {
 		item := firewallRuleView{
 			Direction: string(rule.Direction),

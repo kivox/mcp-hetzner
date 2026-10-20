@@ -81,7 +81,9 @@ func (a *App) describeProject(ctx context.Context, _ *mcp.CallToolRequest, _ str
 		}
 		page, rate := metaOf(resp)
 		item.dest.Total = page.Total
-		if rate.SlowDown {
+		// Report the most depleted budget the summary saw, not just the last
+		// call, so slow_down is not hidden by a later, healthier response.
+		if rate.Limit > 0 && (out.RateLimit.Limit == 0 || rate.Remaining < out.RateLimit.Remaining) {
 			out.RateLimit = rate
 		}
 	}

@@ -26,6 +26,13 @@ func (a *App) listServers(ctx context.Context, _ *mcp.CallToolRequest, in listSe
 	}
 	opts := hcloud.ServerListOpts{ListOpts: in.listOpts()}
 	if in.Status != "" {
+		switch hcloud.ServerStatus(in.Status) {
+		case hcloud.ServerStatusRunning, hcloud.ServerStatusInitializing, hcloud.ServerStatusStarting,
+			hcloud.ServerStatusStopping, hcloud.ServerStatusOff, hcloud.ServerStatusDeleting,
+			hcloud.ServerStatusMigrating, hcloud.ServerStatusRebuilding, hcloud.ServerStatusUnknown:
+		default:
+			return nil, listServersOut{}, fmt.Errorf("status must be running, initializing, starting, stopping, off, deleting, migrating, rebuilding, or unknown")
+		}
 		opts.Status = []hcloud.ServerStatus{hcloud.ServerStatus(in.Status)}
 	}
 	servers, resp, err := client.Server.List(ctx, opts)
@@ -146,7 +153,12 @@ type deletedOut struct {
 	Action  *actionView `json:"action,omitempty"`
 }
 
-func (a *App) deleteServer(ctx context.Context, _ *mcp.CallToolRequest, in deleteIn) (*mcp.CallToolResult, deletedOut, error) {
+type deleteServerIn struct {
+	deleteIn
+	Wait *bool `json:"wait,omitempty" jsonschema:"Wait until the delete action finishes. Default true."`
+}
+
+func (a *App) deleteServer(ctx context.Context, _ *mcp.CallToolRequest, in deleteServerIn) (*mcp.CallToolResult, deletedOut, error) {
 	client, err := a.api()
 	if err != nil {
 		return nil, deletedOut{}, err
@@ -168,6 +180,11 @@ func (a *App) deleteServer(ctx context.Context, _ *mcp.CallToolRequest, in delet
 	out := deletedOut{Deleted: true, ID: server.ID, Name: server.Name}
 	if result != nil {
 		out.Action = viewAction(result.Action)
+		if wantWait(in.Wait) {
+			if err = a.wait(ctx, result.Action); err != nil {
+				return nil, deletedOut{}, err
+			}
+		}
 	}
 	return nil, out, nil
 }
@@ -218,7 +235,7 @@ func (a *App) serverPower(ctx context.Context, _ *mcp.CallToolRequest, in server
 	if fresh, _, getErr := client.Server.GetByID(ctx, server.ID); getErr == nil && fresh != nil {
 		server = fresh
 	}
-	return nil, serverPowerOut{Server: viewServer(server), Action: *viewAction(action)}, nil
+	return nil, serverPowerOut{Server: viewServer(server), Action: actionValue(action)}, nil
 }
 
 func (a *App) lookupServer(ctx context.Context, client *hcloud.Client, id int64, name string) (*hcloud.Server, error) {

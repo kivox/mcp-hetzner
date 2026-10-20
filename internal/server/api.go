@@ -39,7 +39,12 @@ func (a *App) findOperations(_ context.Context, _ *mcp.CallToolRequest, in findI
 		for tag, count := range counts {
 			tags = append(tags, tagCount{Tag: tag, Count: count})
 		}
-		sort.Slice(tags, func(i, j int) bool { return tags[i].Count > tags[j].Count })
+		sort.Slice(tags, func(i, j int) bool {
+			if tags[i].Count != tags[j].Count {
+				return tags[i].Count > tags[j].Count
+			}
+			return tags[i].Tag < tags[j].Tag
+		})
 		return nil, findOut{
 			Tags: tags,
 			Hint: "Pass query to narrow this. Use cloud_get for a GET path and cloud_api for POST, PUT, or DELETE. The server sends the authenticated request.",
