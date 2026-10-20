@@ -17,8 +17,9 @@ type networkView struct {
 }
 
 type networksOut struct {
-	Networks []networkView `json:"networks"`
-	Page     pageInfo      `json:"page"`
+	Networks  []networkView `json:"networks"`
+	Page      pageInfo      `json:"page"`
+	RateLimit rateInfo      `json:"rate_limit"`
 }
 
 func (a *App) listNetworks(ctx context.Context, _ *mcp.CallToolRequest, in namedList) (*mcp.CallToolResult, networksOut, error) {
@@ -31,7 +32,7 @@ func (a *App) listNetworks(ctx context.Context, _ *mcp.CallToolRequest, in named
 		return nil, networksOut{}, err
 	}
 	out := networksOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		view := networkView{ID: item.ID, Name: item.Name, Servers: len(item.Servers), Subnets: len(item.Subnets), Protected: item.Protection.Delete}
 		if item.IPRange != nil {
@@ -60,6 +61,7 @@ type loadBalancerView struct {
 type loadBalancersOut struct {
 	LoadBalancers []loadBalancerView `json:"load_balancers"`
 	Page          pageInfo           `json:"page"`
+	RateLimit     rateInfo           `json:"rate_limit"`
 }
 
 func (a *App) listLoadBalancers(ctx context.Context, _ *mcp.CallToolRequest, in namedList) (*mcp.CallToolResult, loadBalancersOut, error) {
@@ -72,7 +74,7 @@ func (a *App) listLoadBalancers(ctx context.Context, _ *mcp.CallToolRequest, in 
 		return nil, loadBalancersOut{}, err
 	}
 	out := loadBalancersOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		view := loadBalancerView{
 			ID: item.ID, Name: item.Name, Services: len(item.Services), Targets: len(item.Targets),
@@ -108,6 +110,7 @@ type addressView struct {
 type addressesOut struct {
 	Addresses []addressView `json:"addresses"`
 	Page      pageInfo      `json:"page"`
+	RateLimit rateInfo      `json:"rate_limit"`
 }
 
 func (a *App) listPrimaryIPs(ctx context.Context, _ *mcp.CallToolRequest, in namedList) (*mcp.CallToolResult, addressesOut, error) {
@@ -120,7 +123,7 @@ func (a *App) listPrimaryIPs(ctx context.Context, _ *mcp.CallToolRequest, in nam
 		return nil, addressesOut{}, err
 	}
 	out := addressesOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		view := addressView{
 			ID: item.ID, Name: item.Name, IP: ipString(item.IP), Type: string(item.Type),
@@ -147,7 +150,7 @@ func (a *App) listFloatingIPs(ctx context.Context, _ *mcp.CallToolRequest, in na
 		return nil, addressesOut{}, err
 	}
 	out := addressesOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		view := addressView{
 			ID: item.ID, Name: item.Name, IP: ipString(item.IP), Type: string(item.Type),

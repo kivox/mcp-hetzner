@@ -27,6 +27,7 @@ type serverTypeView struct {
 type serverTypesOut struct {
 	ServerTypes []serverTypeView `json:"server_types"`
 	Page        pageInfo         `json:"page"`
+	RateLimit   rateInfo         `json:"rate_limit"`
 }
 
 func (a *App) listServerTypes(ctx context.Context, _ *mcp.CallToolRequest, in page) (*mcp.CallToolResult, serverTypesOut, error) {
@@ -39,7 +40,7 @@ func (a *App) listServerTypes(ctx context.Context, _ *mcp.CallToolRequest, in pa
 		return nil, serverTypesOut{}, err
 	}
 	out := serverTypesOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		out.ServerTypes = append(out.ServerTypes, serverTypeView{
 			Name: item.Name, Description: item.Description, Cores: item.Cores,
@@ -63,8 +64,9 @@ type imageView struct {
 }
 
 type imagesOut struct {
-	Images []imageView `json:"images"`
-	Page   pageInfo    `json:"page"`
+	Images    []imageView `json:"images"`
+	Page      pageInfo    `json:"page"`
+	RateLimit rateInfo    `json:"rate_limit"`
 }
 
 type listImagesIn struct {
@@ -83,8 +85,18 @@ func (a *App) listImages(ctx context.Context, _ *mcp.CallToolRequest, in listIma
 	if kind == "" {
 		kind = "system"
 	}
+	switch hcloud.ImageType(kind) {
+	case hcloud.ImageTypeSystem, hcloud.ImageTypeSnapshot, hcloud.ImageTypeBackup, hcloud.ImageTypeApp:
+	default:
+		return nil, imagesOut{}, fmt.Errorf("type must be system, snapshot, backup, or app")
+	}
 	opts := hcloud.ImageListOpts{ListOpts: in.listOpts(), Type: []hcloud.ImageType{hcloud.ImageType(kind)}, Name: in.Name}
 	if in.Architecture != "" {
+		switch hcloud.Architecture(in.Architecture) {
+		case hcloud.ArchitectureX86, hcloud.ArchitectureARM:
+		default:
+			return nil, imagesOut{}, fmt.Errorf("architecture must be x86 or arm")
+		}
 		opts.Architecture = []hcloud.Architecture{hcloud.Architecture(in.Architecture)}
 	}
 	items, resp, err := client.Image.List(ctx, opts)
@@ -92,7 +104,7 @@ func (a *App) listImages(ctx context.Context, _ *mcp.CallToolRequest, in listIma
 		return nil, imagesOut{}, err
 	}
 	out := imagesOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		out.Images = append(out.Images, imageView{
 			ID: item.ID, Name: item.Name, Description: item.Description,
@@ -138,8 +150,9 @@ func (a *App) listLocations(ctx context.Context, _ *mcp.CallToolRequest, _ struc
 }
 
 type sshKeysOut struct {
-	SSHKeys []sshKeyView `json:"ssh_keys"`
-	Page    pageInfo     `json:"page"`
+	SSHKeys   []sshKeyView `json:"ssh_keys"`
+	Page      pageInfo     `json:"page"`
+	RateLimit rateInfo     `json:"rate_limit"`
 }
 
 func (a *App) listSSHKeys(ctx context.Context, _ *mcp.CallToolRequest, in namedList) (*mcp.CallToolResult, sshKeysOut, error) {
@@ -152,7 +165,7 @@ func (a *App) listSSHKeys(ctx context.Context, _ *mcp.CallToolRequest, in namedL
 		return nil, sshKeysOut{}, err
 	}
 	out := sshKeysOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		out.SSHKeys = append(out.SSHKeys, viewSSHKey(item))
 	}
@@ -185,9 +198,9 @@ func (a *App) deleteSSHKey(ctx context.Context, _ *mcp.CallToolRequest, in delet
 	if err != nil {
 		return nil, deletedOut{}, err
 	}
-	key, _, err := client.SSHKey.GetByID(ctx, in.ID)
-	if err != nil || key == nil {
-		return nil, deletedOut{}, fmt.Errorf("ssh key %d: %w", in.ID, errOrMissing(err))
+	key, err := lookupSSHKey(ctx, client, in.ID, in.ConfirmName)
+	if err != nil {
+		return nil, deletedOut{}, err
 	}
 	if key.Name != in.ConfirmName {
 		return nil, deletedOut{}, fmt.Errorf("confirm_name %q does not match ssh key %q", in.ConfirmName, key.Name)
@@ -198,9 +211,62 @@ func (a *App) deleteSSHKey(ctx context.Context, _ *mcp.CallToolRequest, in delet
 	return nil, deletedOut{Deleted: true, ID: key.ID, Name: key.Name}, nil
 }
 
+type updateSSHKeyIn struct {
+	ID   int64  `json:"id" jsonschema:"SSH key id."`
+	Name string `json:"name,omitempty" jsonschema:"New key name. Omit to keep the current one."`
+	labelPatch
+}
+
+func (a *App) updateSSHKey(ctx context.Context, _ *mcp.CallToolRequest, in updateSSHKeyIn) (*mcp.CallToolResult, sshKeyView, error) {
+	client, err := a.api()
+	if err != nil {
+		return nil, sshKeyView{}, err
+	}
+	if in.Name == "" && in.labelPatch.empty() {
+		return nil, sshKeyView{}, fmt.Errorf("pass a name, a label change, or both")
+	}
+	key, err := lookupSSHKey(ctx, client, in.ID, "")
+	if err != nil {
+		return nil, sshKeyView{}, err
+	}
+	labels, changeLabels, err := in.labelPatch.apply(key.Labels)
+	if err != nil {
+		return nil, sshKeyView{}, err
+	}
+	opts := hcloud.SSHKeyUpdateOpts{Name: in.Name}
+	if changeLabels {
+		opts.Labels = labels
+	}
+	updated, _, err := client.SSHKey.Update(ctx, key, opts)
+	if err != nil {
+		return nil, sshKeyView{}, err
+	}
+	return nil, viewSSHKey(updated), nil
+}
+
+// lookupSSHKey resolves by id, or by name when the caller only has the name.
+func lookupSSHKey(ctx context.Context, client *hcloud.Client, id int64, name string) (*hcloud.SSHKey, error) {
+	if id != 0 {
+		key, _, err := client.SSHKey.GetByID(ctx, id)
+		if err != nil || key == nil {
+			return nil, fmt.Errorf("ssh key %d: %w", id, errOrMissing(err))
+		}
+		return key, nil
+	}
+	if name != "" {
+		key, _, err := client.SSHKey.GetByName(ctx, name)
+		if err != nil || key == nil {
+			return nil, fmt.Errorf("ssh key %q: %w", name, errOrMissing(err))
+		}
+		return key, nil
+	}
+	return nil, fmt.Errorf("pass id or confirm_name")
+}
+
 type volumesOut struct {
-	Volumes []volumeView `json:"volumes"`
-	Page    pageInfo     `json:"page"`
+	Volumes   []volumeView `json:"volumes"`
+	Page      pageInfo     `json:"page"`
+	RateLimit rateInfo     `json:"rate_limit"`
 }
 
 func (a *App) listVolumes(ctx context.Context, _ *mcp.CallToolRequest, in namedList) (*mcp.CallToolResult, volumesOut, error) {
@@ -213,7 +279,7 @@ func (a *App) listVolumes(ctx context.Context, _ *mcp.CallToolRequest, in namedL
 		return nil, volumesOut{}, err
 	}
 	out := volumesOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		out.Volumes = append(out.Volumes, viewVolume(item))
 	}
@@ -243,6 +309,18 @@ func (a *App) createVolume(ctx context.Context, _ *mcp.CallToolRequest, in creat
 	client, err := a.api()
 	if err != nil {
 		return nil, volumeOut{}, err
+	}
+	if in.Location == "" && in.ServerID == 0 {
+		return nil, volumeOut{}, fmt.Errorf("pass location or server_id: Hetzner needs one to place the volume")
+	}
+	if in.Location != "" && in.ServerID != 0 {
+		return nil, volumeOut{}, fmt.Errorf("pass location or server_id, not both: a server already fixes the volume location")
+	}
+	if in.Size < 10 {
+		return nil, volumeOut{}, fmt.Errorf("size must be at least 10 GB")
+	}
+	if in.Format != "" && in.Format != "ext4" && in.Format != "xfs" {
+		return nil, volumeOut{}, fmt.Errorf("format must be ext4 or xfs")
 	}
 	opts := hcloud.VolumeCreateOpts{Name: in.Name, Size: in.Size, Labels: in.Labels, Automount: in.Automount}
 	if in.Format != "" {
@@ -274,6 +352,75 @@ func (a *App) createVolume(ctx context.Context, _ *mcp.CallToolRequest, in creat
 	return nil, volumeOut{Volume: viewVolume(result.Volume), Action: viewAction(result.Action)}, nil
 }
 
+type volumeRef struct {
+	ID   int64  `json:"id,omitempty" jsonschema:"Volume id. Use this or name."`
+	Name string `json:"name,omitempty" jsonschema:"Volume name. Use this or id."`
+}
+
+func (a *App) getVolume(ctx context.Context, _ *mcp.CallToolRequest, in volumeRef) (*mcp.CallToolResult, volumeOut, error) {
+	client, err := a.api()
+	if err != nil {
+		return nil, volumeOut{}, err
+	}
+	volume, err := lookupVolume(ctx, client, in.ID, in.Name)
+	if err != nil {
+		return nil, volumeOut{}, err
+	}
+	return nil, volumeOut{Volume: viewVolume(volume)}, nil
+}
+
+type updateVolumeIn struct {
+	ID   int64  `json:"id" jsonschema:"Volume id."`
+	Name string `json:"name,omitempty" jsonschema:"New volume name. Omit to keep the current one."`
+	labelPatch
+}
+
+func (a *App) updateVolume(ctx context.Context, _ *mcp.CallToolRequest, in updateVolumeIn) (*mcp.CallToolResult, volumeOut, error) {
+	client, err := a.api()
+	if err != nil {
+		return nil, volumeOut{}, err
+	}
+	if in.Name == "" && in.labelPatch.empty() {
+		return nil, volumeOut{}, fmt.Errorf("pass a name, a label change, or both")
+	}
+	volume, err := lookupVolume(ctx, client, in.ID, "")
+	if err != nil {
+		return nil, volumeOut{}, err
+	}
+	labels, changeLabels, err := in.labelPatch.apply(volume.Labels)
+	if err != nil {
+		return nil, volumeOut{}, err
+	}
+	opts := hcloud.VolumeUpdateOpts{Name: in.Name}
+	if changeLabels {
+		opts.Labels = labels
+	}
+	updated, _, err := client.Volume.Update(ctx, volume, opts)
+	if err != nil {
+		return nil, volumeOut{}, err
+	}
+	return nil, volumeOut{Volume: viewVolume(updated)}, nil
+}
+
+func lookupVolume(ctx context.Context, client *hcloud.Client, id int64, name string) (*hcloud.Volume, error) {
+	switch {
+	case id != 0:
+		volume, _, err := client.Volume.GetByID(ctx, id)
+		if err != nil || volume == nil {
+			return nil, fmt.Errorf("volume %d: %w", id, errOrMissing(err))
+		}
+		return volume, nil
+	case name != "":
+		volume, _, err := client.Volume.GetByName(ctx, name)
+		if err != nil || volume == nil {
+			return nil, fmt.Errorf("volume %q: %w", name, errOrMissing(err))
+		}
+		return volume, nil
+	default:
+		return nil, fmt.Errorf("pass id or name")
+	}
+}
+
 type volumeActionIn struct {
 	ID          int64  `json:"id"`
 	Action      string `json:"action" jsonschema:"attach, detach, resize, or delete."`
@@ -289,9 +436,9 @@ func (a *App) volumeAction(ctx context.Context, _ *mcp.CallToolRequest, in volum
 	if err != nil {
 		return nil, volumeOut{}, err
 	}
-	volume, _, err := client.Volume.GetByID(ctx, in.ID)
-	if err != nil || volume == nil {
-		return nil, volumeOut{}, fmt.Errorf("volume %d: %w", in.ID, errOrMissing(err))
+	volume, err := lookupVolume(ctx, client, in.ID, "")
+	if err != nil {
+		return nil, volumeOut{}, err
 	}
 	var action *hcloud.Action
 	switch in.Action {
@@ -307,6 +454,9 @@ func (a *App) volumeAction(ctx context.Context, _ *mcp.CallToolRequest, in volum
 	case "detach":
 		action, _, err = client.Volume.Detach(ctx, volume)
 	case "resize":
+		if in.Size <= volume.Size {
+			return nil, volumeOut{}, fmt.Errorf("size %d GB must be larger than the current %d GB: a volume cannot shrink", in.Size, volume.Size)
+		}
 		action, _, err = client.Volume.Resize(ctx, volume, in.Size)
 	case "delete":
 		if volume.Name != in.ConfirmName {

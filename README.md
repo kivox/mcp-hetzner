@@ -28,11 +28,13 @@ MCP_HOST=0.0.0.0 MCP_AUTH_TOKEN=secret ./mcp-hetzner --transport http
 
 ### Tools
 
-- **Core**: `describe_project`, `list_servers`, `get_server`, `create_server`, `update_server`, `set_server_protection`, `delete_server`, `server_power`
+- **Core**: `describe_project`, `list_servers`, `get_server`, `create_server`, `update_server` (labels replace, merge, or remove keys), `set_server_protection`, `delete_server`, `server_power`, `rebuild_server`
+- **Recovery**: `enable_server_rescue`, `disable_server_rescue`, `list_isos`, `server_iso`, `request_console`, `server_backup`, `server_network`
+- **Actions**: `get_action`, `list_actions`, `list_server_actions`
 - **Catalog**: `list_server_types`, `list_images`, `list_locations`
-- **SSH Keys**: `list_ssh_keys`, `create_ssh_key`, `delete_ssh_key`
-- **Volumes**: `list_volumes`, `create_volume`, `volume_action`
-- **Firewalls**: `list_firewalls`, `get_firewall`, `create_firewall`, `set_firewall_rules`, `apply_firewall`, `delete_firewall`
+- **SSH Keys**: `list_ssh_keys`, `create_ssh_key`, `update_ssh_key`, `delete_ssh_key`
+- **Volumes**: `list_volumes`, `get_volume`, `create_volume`, `update_volume`, `volume_action`
+- **Firewalls**: `list_firewalls`, `get_firewall`, `create_firewall`, `update_firewall`, `set_firewall_rules`, `apply_firewall`, `delete_firewall`
 - **Inventory**: `list_networks`, `list_load_balancers`, `list_primary_ips`, `list_floating_ips`
 - **Raw API**: `find_operations`, `cloud_get`, `cloud_api`
 

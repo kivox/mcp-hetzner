@@ -9,9 +9,9 @@ import (
 )
 
 type updateServerIn struct {
-	ID     int64             `json:"id"`
-	Name   string            `json:"name,omitempty" jsonschema:"New hostname. Omit to keep the current name."`
-	Labels map[string]string `json:"labels,omitempty" jsonschema:"Replacement label map. Omit to keep the current labels. An empty object clears them."`
+	ID   int64  `json:"id" jsonschema:"Server id."`
+	Name string `json:"name,omitempty" jsonschema:"New hostname. Omit to keep the current name."`
+	labelPatch
 }
 
 func (a *App) updateServer(ctx context.Context, _ *mcp.CallToolRequest, in updateServerIn) (*mcp.CallToolResult, oneServerOut, error) {
@@ -19,14 +19,22 @@ func (a *App) updateServer(ctx context.Context, _ *mcp.CallToolRequest, in updat
 	if err != nil {
 		return nil, oneServerOut{}, err
 	}
-	if in.Name == "" && in.Labels == nil {
-		return nil, oneServerOut{}, fmt.Errorf("pass name, labels, or both")
+	if in.Name == "" && in.labelPatch.empty() {
+		return nil, oneServerOut{}, fmt.Errorf("pass a name, a label change, or both")
 	}
 	server, err := a.lookupServer(ctx, client, in.ID, "")
 	if err != nil {
 		return nil, oneServerOut{}, err
 	}
-	updated, _, err := client.Server.Update(ctx, server, hcloud.ServerUpdateOpts{Name: in.Name, Labels: in.Labels})
+	labels, changeLabels, err := in.labelPatch.apply(server.Labels)
+	if err != nil {
+		return nil, oneServerOut{}, err
+	}
+	opts := hcloud.ServerUpdateOpts{Name: in.Name}
+	if changeLabels {
+		opts.Labels = labels
+	}
+	updated, _, err := client.Server.Update(ctx, server, opts)
 	if err != nil {
 		return nil, oneServerOut{}, err
 	}
@@ -67,5 +75,5 @@ func (a *App) setServerProtection(ctx context.Context, _ *mcp.CallToolRequest, i
 	if fresh, _, getErr := client.Server.GetByID(ctx, server.ID); getErr == nil && fresh != nil {
 		server = fresh
 	}
-	return nil, serverPowerOut{Server: viewServer(server), Action: *viewAction(action)}, nil
+	return nil, serverPowerOut{Server: viewServer(server), Action: actionValue(action)}, nil
 }

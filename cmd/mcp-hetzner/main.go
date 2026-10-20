@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -75,8 +76,8 @@ func envInt(key string, fallback int) int {
 	if value == "" {
 		return fallback
 	}
-	var parsed int
-	if _, err := fmt.Sscan(value, &parsed); err != nil {
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
 		return fallback
 	}
 	return parsed
