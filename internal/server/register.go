@@ -98,7 +98,7 @@ func (a *App) register(s *mcp.Server) {
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "request_console",
 		Description: "Open the noVNC console for a server. Returns a short-lived wss_url and password. Show them once and do not log them.",
-		Annotations: additive("Request the console"),
+		Annotations: creates("Request the console"),
 	}, a.requestConsole)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "server_backup",

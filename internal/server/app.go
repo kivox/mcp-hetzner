@@ -80,8 +80,9 @@ func additive(title string) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{Title: title, DestructiveHint: boolPtr(false), IdempotentHint: true}
 }
 
-// creates marks a tool that allocates a new resource. Calling it twice makes
-// two resources, so it must not be advertised as idempotent.
+// creates marks a tool that produces something new on every call, either a
+// resource or a one-time credential. Calling it twice yields two results, so it
+// must not be advertised as idempotent.
 func creates(title string) *mcp.ToolAnnotations {
 	return &mcp.ToolAnnotations{Title: title, DestructiveHint: boolPtr(false), IdempotentHint: false}
 }

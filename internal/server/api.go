@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/url"
 	"sort"
 	"strings"
@@ -82,14 +83,14 @@ type cloudIn struct {
 }
 
 type cloudOut struct {
-	Status    int             `json:"status"`
-	Operation string          `json:"operation,omitempty"`
-	Path      string          `json:"path"`
-	Body      json.RawMessage `json:"body,omitempty"`
-	Text      string          `json:"text,omitempty"`
-	Truncated bool            `json:"truncated,omitempty"`
-	RateLimit rateInfo        `json:"rate_limit"`
-	Error     string          `json:"error,omitempty"`
+	Status    int      `json:"status"`
+	Operation string   `json:"operation,omitempty"`
+	Path      string   `json:"path"`
+	Body      any      `json:"body,omitempty"`
+	Text      string   `json:"text,omitempty"`
+	Truncated bool     `json:"truncated,omitempty"`
+	RateLimit rateInfo `json:"rate_limit"`
+	Error     string   `json:"error,omitempty"`
 }
 
 // normalizeCloudPath accepts the paths find_operations returns and the /v1
@@ -148,7 +149,7 @@ func (a *App) callCloud(ctx context.Context, method, path string, query map[stri
 		}
 		requestPath += "?" + values.Encode()
 	}
-	var payload *strings.Reader
+	var payload io.Reader
 	if body != "" {
 		if !json.Valid([]byte(body)) {
 			return nil, cloudOut{}, fmt.Errorf("body must be JSON")
@@ -174,7 +175,13 @@ func (a *App) callCloud(ctx context.Context, method, path string, query map[stri
 		return &mcp.CallToolResult{IsError: true}, out, nil
 	}
 	if len(payloadBytes) > 0 && json.Valid(payloadBytes) {
-		out.Body = json.RawMessage(append([]byte(nil), payloadBytes...))
+		// Decode into any: json.RawMessage would be inferred as a byte array by
+		// the MCP output schema, which rejects the object bodies the Cloud API
+		// returns for almost every operation.
+		var decoded any
+		if decodeErr := json.Unmarshal(payloadBytes, &decoded); decodeErr == nil {
+			out.Body = decoded
+		}
 	} else if len(payloadBytes) > 0 {
 		out.Text = string(payloadBytes)
 	}

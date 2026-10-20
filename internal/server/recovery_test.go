@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -148,6 +149,77 @@ func TestServerBackupEnable(t *testing.T) {
 	bad := callTool(t, session, "server_backup", map[string]any{"id": 1, "action": "enable", "window": "25-02"})
 	if !bad.IsError {
 		t.Fatal("an impossible backup window must be refused")
+	}
+}
+
+// Enabling backups with no window must send a bodyless request. A typed-nil
+// *strings.Reader would panic inside http.NewRequestWithContext.
+func TestServerBackupEnableWithoutWindow(t *testing.T) {
+	var (
+		sawContentType string
+		sawBody        string
+	)
+	app := fakeApp(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/servers/1":
+			writeJSON(w, map[string]any{"server": serverFixture()})
+		case r.Method == http.MethodPost && r.URL.Path == "/servers/1/actions/enable_backup":
+			sawContentType = r.Header.Get("Content-Type")
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Errorf("read body: %v", err)
+			}
+			sawBody = string(body)
+			writeJSON(w, map[string]any{"action": actionFixture(41, "success")})
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	session := connect(t, NewServer(app))
+
+	result := callTool(t, session, "server_backup", map[string]any{"id": 1, "action": "enable"})
+	if result.IsError {
+		t.Fatalf("tool error: %+v: %s", result, toolText(result))
+	}
+	if sawContentType != "" {
+		t.Fatalf("a windowless enable must not send a content type, got %q", sawContentType)
+	}
+	if sawBody != "" {
+		t.Fatalf("a windowless enable must send an empty body, got %q", sawBody)
+	}
+	var out serverActionOut
+	structured(t, result, &out)
+	if out.Action.ID != 41 {
+		t.Fatalf("action %+v", out.Action)
+	}
+}
+
+func TestBackupWindowRejectsZeroLength(t *testing.T) {
+	for _, window := range []string{"22-22", "00-00", "07-07", "23-23"} {
+		if validBackupWindow(window) {
+			t.Errorf("%q is a zero-length window and must be refused", window)
+		}
+	}
+	for _, window := range []string{"22-02", "00-23", "23-00"} {
+		if !validBackupWindow(window) {
+			t.Errorf("%q is a valid window and must be accepted", window)
+		}
+	}
+
+	app := fakeApp(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/servers/1" {
+			writeJSON(w, map[string]any{"server": serverFixture()})
+			return
+		}
+		http.NotFound(w, r)
+	})
+	session := connect(t, NewServer(app))
+	zero := callTool(t, session, "server_backup", map[string]any{"id": 1, "action": "enable", "window": "22-22"})
+	if !zero.IsError {
+		t.Fatal("a zero-length window must be refused before the API call")
+	}
+	if text := toolText(zero); !strings.Contains(text, "different") {
+		t.Fatalf("zero-length window error %q", text)
 	}
 }
 
@@ -427,6 +499,28 @@ func TestCreateToolsAreNotIdempotent(t *testing.T) {
 			t.Fatalf("%s must be non-destructive", tool.Name)
 		}
 	}
+}
+
+// Every request_console call mints a new one-time token and password, so it is
+// not idempotent and must not be advertised as safe to repeat.
+func TestRequestConsoleIsNotIdempotent(t *testing.T) {
+	session := connect(t, NewServer(nil))
+	for tool, err := range session.Tools(context.Background(), nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if tool.Name != "request_console" {
+			continue
+		}
+		if tool.Annotations == nil {
+			t.Fatal("request_console has no annotations")
+		}
+		if tool.Annotations.IdempotentHint {
+			t.Fatal("request_console mints a new token on every call and must not be marked idempotent")
+		}
+		return
+	}
+	t.Fatal("request_console is not registered")
 }
 
 func TestEveryToolIsAnnotated(t *testing.T) {

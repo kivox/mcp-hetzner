@@ -314,7 +314,7 @@ func (a *App) createVolume(ctx context.Context, _ *mcp.CallToolRequest, in creat
 		return nil, volumeOut{}, fmt.Errorf("pass location or server_id: Hetzner needs one to place the volume")
 	}
 	if in.Location != "" && in.ServerID != 0 {
-		return nil, volumeOut{}, fmt.Errorf("pass loc" + "ation or server_id, not both: a server already fixes the volume location")
+		return nil, volumeOut{}, fmt.Errorf("pass location or server_id, not both: a server already fixes the volume location")
 	}
 	if in.Size < 10 {
 		return nil, volumeOut{}, fmt.Errorf("size must be at least 10 GB")

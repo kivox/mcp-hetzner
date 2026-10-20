@@ -123,7 +123,7 @@ func (a *App) listPrimaryIPs(ctx context.Context, _ *mcp.CallToolRequest, in nam
 		return nil, addressesOut{}, err
 	}
 	out := addressesOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		view := addressView{
 			ID: item.ID, Name: item.Name, IP: ipString(item.IP), Type: string(item.Type),
@@ -150,7 +150,7 @@ func (a *App) listFloatingIPs(ctx context.Context, _ *mcp.CallToolRequest, in na
 		return nil, addressesOut{}, err
 	}
 	out := addressesOut{}
-	out.Page, _ = metaOf(resp)
+	out.Page, out.RateLimit = metaOf(resp)
 	for _, item := range items {
 		view := addressView{
 			ID: item.ID, Name: item.Name, IP: ipString(item.IP), Type: string(item.Type),

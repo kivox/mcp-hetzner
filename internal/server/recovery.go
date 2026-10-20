@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -175,13 +176,23 @@ type backupIn struct {
 
 var backupWindow = regexp.MustCompile(`^([01]\d|2[0-3])-([01]\d|2[0-3])$`)
 
+// validBackupWindow accepts HH-HH with two real hours. A window such as 22-22
+// is zero hours long, which Hetzner refuses, so it is rejected here.
+func validBackupWindow(window string) bool {
+	match := backupWindow.FindStringSubmatch(window)
+	if match == nil {
+		return false
+	}
+	return match[1] != match[2]
+}
+
 func (a *App) serverBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, serverActionOut, error) {
 	client, err := a.api()
 	if err != nil {
 		return nil, serverActionOut{}, err
 	}
-	if in.Window != "" && !backupWindow.MatchString(in.Window) {
-		return nil, serverActionOut{}, fmt.Errorf("window must look like 22-02, two UTC hours")
+	if in.Window != "" && !validBackupWindow(in.Window) {
+		return nil, serverActionOut{}, fmt.Errorf("window must look like 22-02: two different UTC hours")
 	}
 	server, err := a.lookupServer(ctx, client, in.ID, "")
 	if err != nil {
@@ -217,7 +228,7 @@ func (a *App) serverBackup(ctx context.Context, _ *mcp.CallToolRequest, in backu
 // argument and posts an empty body, which silently drops the requested slot.
 func enableBackup(ctx context.Context, client *hcloud.Client, server *hcloud.Server, window string) (*hcloud.Action, error) {
 	path := fmt.Sprintf("/servers/%d/actions/enable_backup", server.ID)
-	var body *strings.Reader
+	var body io.Reader
 	if window != "" {
 		body = strings.NewReader(fmt.Sprintf(`{"backup_window":%q}`, window))
 	}
