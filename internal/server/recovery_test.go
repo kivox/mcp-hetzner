@@ -123,38 +123,10 @@ func TestRequestConsole(t *testing.T) {
 	}
 }
 
+// EnableBackup posts no request body: Hetzner dropped the backup window from
+// the endpoint (hcloud-go CHANGELOG 2.14.0, hcloud-go#525), so there is nothing
+// to send and the tool no longer accepts a window.
 func TestServerBackupEnable(t *testing.T) {
-	var body map[string]any
-	app := fakeApp(t, func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/servers/1":
-			writeJSON(w, map[string]any{"server": serverFixture()})
-		case r.Method == http.MethodPost && r.URL.Path == "/servers/1/actions/enable_backup":
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			writeJSON(w, map[string]any{"action": actionFixture(40, "success")})
-		default:
-			http.NotFound(w, r)
-		}
-	})
-	session := connect(t, NewServer(app))
-
-	result := callTool(t, session, "server_backup", map[string]any{"id": 1, "action": "enable", "window": "22-02"})
-	if result.IsError {
-		t.Fatalf("tool error: %+v: %s", result, toolText(result))
-	}
-	if body["backup_window"] != "22-02" {
-		t.Fatalf("backup body %v", body)
-	}
-
-	bad := callTool(t, session, "server_backup", map[string]any{"id": 1, "action": "enable", "window": "25-02"})
-	if !bad.IsError {
-		t.Fatal("an impossible backup window must be refused")
-	}
-}
-
-// Enabling backups with no window must send a bodyless request. A typed-nil
-// *strings.Reader would panic inside http.NewRequestWithContext.
-func TestServerBackupEnableWithoutWindow(t *testing.T) {
 	var (
 		sawContentType string
 		sawBody        string
@@ -170,7 +142,7 @@ func TestServerBackupEnableWithoutWindow(t *testing.T) {
 				t.Errorf("read body: %v", err)
 			}
 			sawBody = string(body)
-			writeJSON(w, map[string]any{"action": actionFixture(41, "success")})
+			writeJSON(w, map[string]any{"action": actionFixture(40, "success")})
 		default:
 			http.NotFound(w, r)
 		}
@@ -182,44 +154,15 @@ func TestServerBackupEnableWithoutWindow(t *testing.T) {
 		t.Fatalf("tool error: %+v: %s", result, toolText(result))
 	}
 	if sawContentType != "" {
-		t.Fatalf("a windowless enable must not send a content type, got %q", sawContentType)
+		t.Fatalf("enable_backup must not send a content type, got %q", sawContentType)
 	}
 	if sawBody != "" {
-		t.Fatalf("a windowless enable must send an empty body, got %q", sawBody)
+		t.Fatalf("enable_backup must send an empty body, got %q", sawBody)
 	}
 	var out serverActionOut
 	structured(t, result, &out)
-	if out.Action.ID != 41 {
+	if out.Action.ID != 40 {
 		t.Fatalf("action %+v", out.Action)
-	}
-}
-
-func TestBackupWindowRejectsZeroLength(t *testing.T) {
-	for _, window := range []string{"22-22", "00-00", "07-07", "23-23"} {
-		if validBackupWindow(window) {
-			t.Errorf("%q is a zero-length window and must be refused", window)
-		}
-	}
-	for _, window := range []string{"22-02", "00-23", "23-00"} {
-		if !validBackupWindow(window) {
-			t.Errorf("%q is a valid window and must be accepted", window)
-		}
-	}
-
-	app := fakeApp(t, func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path == "/servers/1" {
-			writeJSON(w, map[string]any{"server": serverFixture()})
-			return
-		}
-		http.NotFound(w, r)
-	})
-	session := connect(t, NewServer(app))
-	zero := callTool(t, session, "server_backup", map[string]any{"id": 1, "action": "enable", "window": "22-22"})
-	if !zero.IsError {
-		t.Fatal("a zero-length window must be refused before the API call")
-	}
-	if text := toolText(zero); !strings.Contains(text, "different") {
-		t.Fatalf("zero-length window error %q", text)
 	}
 }
 

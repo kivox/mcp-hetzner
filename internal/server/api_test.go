@@ -90,6 +90,33 @@ func TestCloudAPIForwardsBody(t *testing.T) {
 	}
 }
 
+// A cloud_get object body must come back decoded, not as a base64 byte array:
+// the MCP output schema infers byte arrays for json.RawMessage.
+func TestCloudGetReturnsObjectBody(t *testing.T) {
+	app := fakeApp(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != "/servers/1" {
+			http.NotFound(w, r)
+			return
+		}
+		writeJSON(w, map[string]any{"server": serverFixture()})
+	})
+	session := connect(t, NewServer(app))
+
+	result := callTool(t, session, "cloud_get", map[string]any{"path": "/servers/1"})
+	if result.IsError {
+		t.Fatalf("tool error: %+v: %s", result, toolText(result))
+	}
+	var out cloudOut
+	structured(t, result, &out)
+	body, ok := out.Body.(map[string]any)
+	if !ok {
+		t.Fatalf("object response body %T %+v", out.Body, out.Body)
+	}
+	if _, ok := body["server"]; !ok {
+		t.Fatalf("object response body %+v", body)
+	}
+}
+
 // The IP list tools must report the rate-limit meta like every other list.
 func TestIPListsReportRateLimit(t *testing.T) {
 	app := fakeApp(t, func(w http.ResponseWriter, r *http.Request) {

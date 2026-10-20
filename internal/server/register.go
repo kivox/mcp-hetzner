@@ -102,7 +102,7 @@ func (a *App) register(s *mcp.Server) {
 	}, a.requestConsole)
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "server_backup",
-		Description: "Enable or disable automatic backups, optionally in an HH-HH UTC window. The server sends the action and waits by default.",
+		Description: "Enable or disable automatic backups. The server sends the action and waits by default.",
 		Annotations: additive("Change server backups"),
 	}, a.serverBackup)
 	mcp.AddTool(s, &mcp.Tool{

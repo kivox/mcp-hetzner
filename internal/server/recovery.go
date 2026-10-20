@@ -3,13 +3,9 @@ package server
 import (
 	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"regexp"
 	"strings"
 
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
-	"github.com/hetznercloud/hcloud-go/v2/hcloud/schema"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -170,29 +166,13 @@ func (a *App) requestConsole(ctx context.Context, _ *mcp.CallToolRequest, in con
 type backupIn struct {
 	ID     int64  `json:"id" jsonschema:"Server id."`
 	Action string `json:"action" jsonschema:"enable or disable."`
-	Window string `json:"window,omitempty" jsonschema:"Backup window in UTC as HH-HH, for example 22-02. Omit to let Hetzner choose."`
 	Wait   *bool  `json:"wait,omitempty" jsonschema:"Wait until the action finishes. Default true."`
-}
-
-var backupWindow = regexp.MustCompile(`^([01]\d|2[0-3])-([01]\d|2[0-3])$`)
-
-// validBackupWindow accepts HH-HH with two real hours. A window such as 22-22
-// is zero hours long, which Hetzner refuses, so it is rejected here.
-func validBackupWindow(window string) bool {
-	match := backupWindow.FindStringSubmatch(window)
-	if match == nil {
-		return false
-	}
-	return match[1] != match[2]
 }
 
 func (a *App) serverBackup(ctx context.Context, _ *mcp.CallToolRequest, in backupIn) (*mcp.CallToolResult, serverActionOut, error) {
 	client, err := a.api()
 	if err != nil {
 		return nil, serverActionOut{}, err
-	}
-	if in.Window != "" && !validBackupWindow(in.Window) {
-		return nil, serverActionOut{}, fmt.Errorf("window must look like 22-02: two different UTC hours")
 	}
 	server, err := a.lookupServer(ctx, client, in.ID, "")
 	if err != nil {
@@ -201,11 +181,11 @@ func (a *App) serverBackup(ctx context.Context, _ *mcp.CallToolRequest, in backu
 	var action *hcloud.Action
 	switch strings.ToLower(strings.TrimSpace(in.Action)) {
 	case "enable":
-		action, err = enableBackup(ctx, client, server, in.Window)
+		// Hetzner removed the backup window from this endpoint: the API takes no
+		// request body, and hcloud-go v2.50.0 keeps the window argument only for
+		// compatibility and ignores it (CHANGELOG 2.14.0, hcloud-go#525).
+		action, _, err = client.Server.EnableBackup(ctx, server, "")
 	case "disable":
-		if in.Window != "" {
-			return nil, serverActionOut{}, fmt.Errorf("window only applies when enabling backups")
-		}
 		action, _, err = client.Server.DisableBackup(ctx, server)
 	default:
 		return nil, serverActionOut{}, fmt.Errorf("action must be enable or disable")
@@ -222,25 +202,6 @@ func (a *App) serverBackup(ctx context.Context, _ *mcp.CallToolRequest, in backu
 		server = fresh
 	}
 	return nil, serverActionOut{Server: viewServer(server), Action: actionValue(action)}, nil
-}
-
-// enableBackup sends the window itself. hcloud-go v2.50.0 ignores its window
-// argument and posts an empty body, which silently drops the requested slot.
-func enableBackup(ctx context.Context, client *hcloud.Client, server *hcloud.Server, window string) (*hcloud.Action, error) {
-	path := fmt.Sprintf("/servers/%d/actions/enable_backup", server.ID)
-	var body io.Reader
-	if window != "" {
-		body = strings.NewReader(fmt.Sprintf(`{"backup_window":%q}`, window))
-	}
-	req, err := client.NewRequest(ctx, http.MethodPost, path, body)
-	if err != nil {
-		return nil, err
-	}
-	var out schema.ServerActionEnableBackupResponse
-	if _, err = client.Do(req, &out); err != nil {
-		return nil, err
-	}
-	return hcloud.ActionFromSchema(out.Action), nil
 }
 
 type rebuildIn struct {
